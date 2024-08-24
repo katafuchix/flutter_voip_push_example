@@ -15,3 +15,25 @@ For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
 # flutter_voip_push_example
+
+
+## VoIP Push Notification Command
+
+```
+% curl --http2 -E hi-chat_voip_services.pem  --header "apns-topic: hi-chat.deskplate.net.voip" -d "{\"message\":\"Hello\", \"alert\":\"Hello\", \"aps\": {\"message\":\"Hello\", \"content-available\":1} }" https://api.development.push.apple.com/3/device/[VoIP Token]
+```
+
+## info.plist
+
+```
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>fetch</string>
+		<string>processing</string>
+		<string>remote-notification</string>
+		<string>voip</string>
+	</array>
+
+```
+
