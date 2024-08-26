@@ -24,8 +24,9 @@ class MyApp extends StatelessWidget {
       title: 'Flutter Demo',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+        useMaterial3: false,
       ),
+      debugShowCheckedModeBanner: false,
       home: MyHomePage(),
     );
   }
@@ -267,6 +268,7 @@ class _MyHomePageState extends State<MyHomePage> {
     print(arguments);
     try {
       _currentUuid = arguments['uuid'];
+      showIncomingCallDialog(context, _currentUuid!);
     } catch (e) {
       print('Error showing incoming call: $e');
     }
@@ -332,6 +334,43 @@ class _MyHomePageState extends State<MyHomePage> {
           )
         //Text("Waiting for a call..."),
       ),*/
+    );
+  }
+
+  void showIncomingCallDialog(BuildContext context, String uuid) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black54,
+      transitionDuration: Duration(milliseconds: 200),
+      pageBuilder: (BuildContext context, Animation animation, Animation secondaryAnimation) {
+        return Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min, // 内容を中央に配置
+              children: [
+                Text(_currentUuid ?? ''),
+                SizedBox(height: 40,),
+                ElevatedButton(
+                  onPressed: () async {
+                    print("pressed!");
+                    try {
+                      await platform.invokeMethod('endCall', {'uuid': _currentUuid!}); // uuidを渡す
+                    } catch (e) {
+                      print("Failed to end call: $e");
+                    }
+
+                    Navigator.of(context).pop();
+                    // 通話を終了する処理など
+                  },
+                  child: Text("End Call"),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
