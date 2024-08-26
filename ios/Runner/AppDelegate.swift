@@ -1,4 +1,5 @@
 import UIKit
+import AVFAudio
 import Flutter
 import PushKit
 import CallKit
@@ -9,6 +10,7 @@ import flutter_callkit_incoming
     
     var callKitProvider: CXProvider?
     var callUUID: UUID?
+    var callController: CXCallController!
     
   override func application(
     _ application: UIApplication,
@@ -20,11 +22,7 @@ import flutter_callkit_incoming
       // VOIP通知のためのPushKitのセットアップ
       setupPushKit()
       setupCallKitProvider()
-      
-      // アプリがバックグラウンドから復帰したときの処理
-       //if let notification = launchOptions?[.remoteNotification] as? [String: AnyObject] {
-       //    handleVoIPNotification(payload: notification)
-       //}
+      setupChannel()
       
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -36,7 +34,6 @@ import flutter_callkit_incoming
       voipRegistry.delegate = self
       voipRegistry.desiredPushTypes = [PKPushType.voIP]
   }
-    
 
     private func handleVoIPNotification(payload: [AnyHashable: Any]) {
         if let flutterViewController = window?.rootViewController as? FlutterViewController {
@@ -61,6 +58,23 @@ import flutter_callkit_incoming
             ])
         }
     }
+    
+    
+    // アプリがバックグラウンドから復帰した際に必要な処理
+    override func applicationWillEnterForeground(_ application: UIApplication) {
+        super.applicationWillEnterForeground(application)
+        // 必要に応じてオーディオセッションを再アクティブ化
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("Failed to reactivate audio session: \(error)")
+        }
+    }
+    
+    override func applicationDidEnterBackground(_ application: UIApplication) {
+        // 必要な場合、バックグラウンドに移行する前にセッションを無効化
+        try? AVAudioSession.sharedInstance().setActive(false)
+    }
 }
 
 //MARK: - PKPushRegistryDelegate
@@ -80,57 +94,10 @@ extension AppDelegate : PKPushRegistryDelegate {
     
     // Handle incoming pushes
     func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType, completion: @escaping () -> Void) {
-        
-        print("didReceiveIncomingPushWith");
-        print("UIApplication.shared.applicationState");
-        print(UIApplication.shared.applicationState);
-        print(UIApplication.shared.applicationState == .active)
-        
-         print(payload.dictionaryPayload)
+        print(payload.dictionaryPayload)
         let payloadDict = payload.dictionaryPayload["aps"] as? [String:Any] ?? [:]
         print(payloadDict);
 
-        /*
-        let id = payload.dictionaryPayload["id"] as? String ?? ""
-        let nameCaller = payload.dictionaryPayload["nameCaller"] as? String ?? ""
-        let handle = payload.dictionaryPayload["handle"] as? String ?? ""
-        let isVideo = payload.dictionaryPayload["isVideo"] as? Bool ?? false
-        
-        let data = flutter_callkit_incoming.Data(id: id, nameCaller: nameCaller, handle: handle, type: isVideo ? 1 : 0)
-        //set more data
-        data.extra = ["user": "abc@123", "platform": "ios"]
-        //data.iconName = ...
-        //data.....
-        SwiftFlutterCallkitIncomingPlugin.sharedInstance?.showCallkitIncoming(data, fromPushKit: true)
-        */
-        /*
-        var info = [String: Any?]()
-        info["uuid"] = "44d915e1-5ff4-4bed-bf13-c423048ec97a"
-         info["id"] = "44d915e1-5ff4-4bed-bf13-c423048ec97a"
-         info["nameCaller"] = "Hien Nguyen"
-         info["handle"] = "0123456789"
-         info["type"] = 1
-         //... set more data
-         SwiftFlutterCallkitIncomingPlugin.sharedInstance?.showCallkitIncoming(flutter_callkit_incoming.Data(args: info), fromPushKit: true)
-
-        
-        //Make sure call completion()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            completion()
-        }
-        */
-        
-       /*
-        if let flutterViewController = window?.rootViewController as? FlutterViewController {
-            let channel = FlutterMethodChannel(name: "com.example.flutter_callkit_incoming", binaryMessenger: flutterViewController.binaryMessenger)
-
-            channel.invokeMethod("showIncomingCall", arguments: [
-                "callerId": "12345",
-                "callerName": "John Doe",
-                "callerAvatar": "https://example.com/avatar.jpg"
-            ])
-        }
-*/
         
         // 通知から通話ハンドル情報を取得
         //guard let handle = payload.dictionaryPayload["handle"] as? String else { return }
@@ -141,70 +108,27 @@ extension AppDelegate : PKPushRegistryDelegate {
         callUUID = UUID()
 
         if UIApplication.shared.applicationState == .active {
-            print("フォアグラウンドまたはバックグラウンドでの処理")
-            // フォアグラウンドまたはバックグラウンドでの処理
+            print("フォアグラウンドでの処理")
+            // フォアグラウンドでの処理
             handleIncomingCallInForeground(callUpdate: callUpdate, completion: completion)
         } else {
+            print("バックグラウンドまたはターミネートでの処理")
             // ターミネート状態からの起動時の処理
-            handleIncomingCallInTerminatedState(callUpdate: callUpdate, completion: completion)
+            //handleIncomingCallInTerminatedState(callUpdate: callUpdate, completion: completion)
+            reportIncomingCall(uuid: callUUID!, handle: handle, completion: completion)
         }
-        
-        
-        /*
-        // VoIP通知でない場合は何もしない
-        if type != .voIP { return }
-        
-        // 通知から通話ハンドル情報を取得
-        //guard let handle = payload.dictionaryPayload["handle"] as? String else { return }
-        let handle = "handle"
-        // CallKitの設定
-        let callUpdate = CXCallUpdate()
-        callUpdate.remoteHandle = CXHandle(type: .phoneNumber, value: handle)
-        let callUUID = UUID()
-        
-        // 1. CallKitで着信を報告
-        callKitProvider?.reportNewIncomingCall(with: callUUID, update: callUpdate) { error in
-            if let error = error {
-                print("Failed to report incoming call: \(error.localizedDescription)")
-                completion()
-                return
-            }
-            
-            // 2. 着信が報告された後、pushRegistryのcompletionを呼び出す
-            completion()
-            
-            // 3. Flutterの処理を実行する
-            if let flutterViewController = self.window?.rootViewController as? FlutterViewController {
-                let channel = FlutterMethodChannel(name: "com.example.flutter_callkit_incoming", binaryMessenger: flutterViewController.binaryMessenger)
-                
-                let arguments: [String: Any] = [
-                    "id": callUUID.uuidString,
-                    "nameCaller": "Caller Name",
-                    "handle": handle,
-                    "type": 0, // 0 = Audio Call, 1 = Video Call
-                    "duration": 30000, // in milliseconds
-                    "textAccept": "Accept",
-                    "textDecline": "Decline",
-                    "textMissedCall": "Missed call",
-                    "textCallback": "Call back",
-                    "extra": ["userId": "user_id"],
-                    "ios": [
-                        "iconName": "CallKitLogo",
-                        "handleType": "generic",
-                        "supportsVideo": true,
-                    ]
-                ]
-                
-                channel.invokeMethod("showIncomingCall", arguments: arguments)
-            }
-        }
-
-        // 通話を確立するためのカスタム処理
-        //establishConnection(for: callUUID)
-         */
 
     }
-    
+
+    func startAudioSession() {
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .voiceChat, options: [])
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("Failed to start audio session: \(error.localizedDescription)")
+        }
+    }
+
     private func establishConnection(for callUUID: UUID) {
         // 通話の確立処理をここに実装します
         print("Establishing connection for call UUID: \(callUUID.uuidString)")
@@ -221,15 +145,7 @@ extension AppDelegate : PKPushRegistryDelegate {
                 "callerAvatar": "https://example.com/avatar.jpg"
             ])
         }
-        
-        /*callKitProvider?.reportNewIncomingCall(with: callUUID!, update: callUpdate) { error in
-            if let error = error {
-                print("Failed to report incoming call: \(error.localizedDescription)")
-            } else {
-                print("Call successfully reported in foreground/background")
-            }
-            completion()
-        }*/
+        completion()
     }
 
     private func handleIncomingCallInTerminatedState(callUpdate: CXCallUpdate, completion: @escaping () -> Void) {
@@ -272,8 +188,27 @@ extension AppDelegate : PKPushRegistryDelegate {
 }
 
 extension AppDelegate: CXProviderDelegate {
-    
+    // バックグラウンドまたはターミネート時の処理
+    func reportIncomingCall(uuid: UUID, handle: String, hasVideo: Bool = false, completion: @escaping () -> Void) {
+        let update = CXCallUpdate()
+        update.remoteHandle = CXHandle(type: .phoneNumber, value: handle)
+        update.hasVideo = hasVideo
+
+        callKitProvider!.reportNewIncomingCall(with: uuid, update: update) { error in
+            if error == nil {
+                // 通話が正常に報告されたので、オーディオセッションを開始
+                self.startAudioSession()
+            } else {
+                // エラー処理
+                print("Error reporting incoming call: \(String(describing: error))")
+            }
+        }
+    }
+
+    // 初期化処理
     private func setupCallKitProvider() {
+        callController = CXCallController()
+        
         let configuration = CXProviderConfiguration(localizedName: "Your App Name")
         configuration.supportsVideo = true
         configuration.maximumCallsPerCallGroup = 1
@@ -282,6 +217,7 @@ extension AppDelegate: CXProviderDelegate {
 
         callKitProvider = CXProvider(configuration: configuration)
         callKitProvider?.setDelegate(self, queue: nil)
+        setupChannel()
     }
     
     func providerDidReset(_ provider: CXProvider) {
@@ -292,10 +228,59 @@ extension AppDelegate: CXProviderDelegate {
     func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
         // 通話を開始する処理を追加
         action.fulfill()
+        print("Answer button is pressed")
+        print(action.uuid.uuidString)
+        print(action.callUUID.uuidString)
+        
+        if let flutterViewController = self.window?.rootViewController as? FlutterViewController {
+            let channel = FlutterMethodChannel(name: "com.example.flutter_callkit_incoming", binaryMessenger: flutterViewController.binaryMessenger)
+            print("flutterViewController")
+            print(flutterViewController)
+            let arguments: [String: Any] = ["uuid": action.callUUID.uuidString]
+            channel.invokeMethod("setCurrentUuid", arguments: arguments)
+        }
     }
 
     func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
         // 通話を終了する処理を追加
         action.fulfill()
+        print("Calling is ended")
     }
+
+    // 通話を終了
+    func endCall(uuid: UUID) {
+        let endCallAction = CXEndCallAction(call: uuid)
+        let transaction = CXTransaction(action: endCallAction)
+
+        callController.request(transaction) { error in
+            if let error = error {
+                print("Error ending call: \(error.localizedDescription)")
+            } else {
+                print("Call ended successfully")
+            }
+        }
+    }
+
+      // Flutter側からの処理を行うための設定
+      private func setupChannel() {
+          let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
+          let channel = FlutterMethodChannel(name: "com.example.flutter_callkit_incoming", binaryMessenger: controller.binaryMessenger)
+
+          channel.setMethodCallHandler({
+              (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
+              // メソッド名によって処理を分岐
+              if call.method == "endCall" {
+                  if let args = call.arguments as? [String: String],
+                     let uuidString = args["uuid"],
+                     let uuid = UUID(uuidString: uuidString) {
+                      self.endCall(uuid: uuid)
+                      result("Call Ended") // 結果を返す
+                  } else {
+                      result(FlutterError(code: "INVALID_ARGUMENT", message: "UUID not provided", details: nil))
+                  }
+              } else {
+                  result(FlutterMethodNotImplemented)
+              }
+          })
+      }
 }

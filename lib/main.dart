@@ -8,6 +8,7 @@ import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import 'package:uuid/uuid.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/services.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 void main() {
   runApp(const MyApp());
@@ -40,6 +41,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
   final Uuid uuid = Uuid();
   String textEvents = "";
+  final AudioPlayer _audioPlayer = AudioPlayer();
+
+  late final Uuid _uuid;
+  String? _currentUuid;
 
   @override
   void initState() {
@@ -49,17 +54,148 @@ class _MyHomePageState extends State<MyHomePage> {
     listenerEvent(onEvent);
   }
 
+  Future<dynamic> initCurrentCall() async {
+    //await requestNotificationPermission();
+    //check current call from pushkit if possible
+    var calls = await FlutterCallkitIncoming.activeCalls();
+    if (calls is List) {
+      if (calls.isNotEmpty) {
+        print('DATA: $calls');
+        _currentUuid = calls[0]['id'];
+        return calls[0];
+      } else {
+        _currentUuid = "";
+        return null;
+      }
+    }
+  }
+
+  Future<void> checkActiveCallAndHandle() async {
+
+    var activeCallsRaw = await FlutterCallkitIncoming.activeCalls();
+
+    // 型キャストを行って、List<Map<String, dynamic>>に変換
+    List<Map<String, dynamic>> activeCalls = [];
+
+    for (var call in activeCallsRaw) {
+      if (call is Map<String, dynamic>) {
+        activeCalls.add(call);
+      } else if (call is Map) {
+        activeCalls.add(Map<String, dynamic>.from(call));
+      }
+    }
+    if (activeCalls.isNotEmpty) {
+      print("There is an active call");
+      // アクティブな通話がある場合の処理
+      handleActiveCall(activeCalls);
+    } else {
+      print("No active calls");
+      // アクティブな通話がない場合の処理
+    }
+  }
+
+  void handleActiveCall(List<Map<String, dynamic>> activeCalls) async {
+
+    await Future.delayed(Duration(seconds: 1));
+    for (var call in activeCalls) {
+      print("----------------------------");
+      print("Active call: ${call['id']}");
+      print(activeCalls[0]['id']);
+      print(call);
+      print("----------------------------");
+      //print(call);
+      // ここで通話の詳細を取得し、必要に応じて処理を行う
+    }
+
+  }
+
   void onEvent(CallEvent event) {
     if (!mounted) return;
     setState(() {
-      textEvents += '---\n${event.toString()}\n';
+      //textEvents += '---\n${event.toString()}\n';
+      textEvents += '---\n${event.event!}\n';
     });
+  }
+
+  Future<void> _playAudio() async {
+    // オーディオを再生
+    await _audioPlayer.play(UrlSource('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'));
+  }
+
+  Future<void> listenerEvent(void Function(CallEvent) callback) async {
+    try {
+      FlutterCallkitIncoming.onEvent.listen((event) async {
+        print('HOME: $event');
+        print("=======================");
+        print(event!.event);
+        print("=======================");
+        switch (event!.event) {
+          case Event.actionCallIncoming:
+          // TODO: received an incoming call
+            break;
+          case Event.actionCallStart:
+          // TODO: started an outgoing call
+          // TODO: show screen calling in Flutter
+            break;
+          case Event.actionCallAccept:
+            await checkActiveCallAndHandle(); // 通話のアクティブ状態をチェックして処理
+          // TODO: accepted an incoming call
+          // TODO: show screen calling in Flutter
+          //NavigationService.instance
+          //    .pushNamedIfNotCurrent(AppRoute.callingPage, args: event.body);
+            _playAudio();
+            break;
+          case Event.actionCallDecline:
+            await checkActiveCallAndHandle(); // 通話のアクティブ状態をチェックして処理
+          // TODO: declined an incoming call
+          //await requestHttp("ACTION_CALL_DECLINE_FROM_DART");
+            break;
+          case Event.actionCallEnded:
+          // TODO: ended an incoming/outgoing call
+            print("Call ended");
+            //await checkActiveCallAndHandle();
+            break;
+          case Event.actionCallTimeout:
+          // TODO: missed an incoming call
+            break;
+          case Event.actionCallCallback:
+          // TODO: only Android - click action `Call back` from missed call notification
+            break;
+          case Event.actionCallToggleHold:
+          // TODO: only iOS
+            break;
+          case Event.actionCallToggleMute:
+          // TODO: only iOS
+            break;
+          case Event.actionCallToggleDmtf:
+          // TODO: only iOS
+            break;
+          case Event.actionCallToggleGroup:
+          // TODO: only iOS
+            break;
+          case Event.actionCallToggleAudioSession:
+          // TODO: only iOS
+            break;
+          case Event.actionDidUpdateDevicePushTokenVoip:
+          // TODO: only iOS
+            break;
+          case Event.actionCallCustom:
+            break;
+        }
+        callback(event);
+      });
+    } on Exception catch (e) {
+      print(e);
+    }
   }
 
   Future<void> _handleMethod(MethodCall call) async {
     switch (call.method) {
       case 'showIncomingCall':
         _showIncomingCall(call.arguments);
+        break;
+      case 'setCurrentUuid':
+        _setCurrentUuid(call.arguments);
         break;
     }
   }
@@ -73,7 +209,8 @@ class _MyHomePageState extends State<MyHomePage> {
         id: callId,
         nameCaller: 'Hien Nguyen',
         appName: 'Callkit',
-        avatar: 'https://i.pravatar.cc/100',
+        //avatar: 'https://i.pravatar.cc/100',
+        avatar: 'https://equal-love.jp/image/profile/otani_emiri.jpg',
         handle: '0123456789',
         type: 0,
         textAccept: 'Accept',
@@ -125,66 +262,13 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-
-  Future<void> listenerEvent(void Function(CallEvent) callback) async {
+  Future<void> _setCurrentUuid(Map<dynamic, dynamic> arguments) async {
+    print("arguments --------");
+    print(arguments);
     try {
-      FlutterCallkitIncoming.onEvent.listen((event) async {
-        print('HOME: $event');
-        print("=======================");
-        print(event!.event);
-        print("=======================");
-        switch (event!.event) {
-          case Event.actionCallIncoming:
-          // TODO: received an incoming call
-            break;
-          case Event.actionCallStart:
-          // TODO: started an outgoing call
-          // TODO: show screen calling in Flutter
-            break;
-          case Event.actionCallAccept:
-          // TODO: accepted an incoming call
-          // TODO: show screen calling in Flutter
-            //NavigationService.instance
-            //    .pushNamedIfNotCurrent(AppRoute.callingPage, args: event.body);
-            break;
-          case Event.actionCallDecline:
-          // TODO: declined an incoming call
-            //await requestHttp("ACTION_CALL_DECLINE_FROM_DART");
-            break;
-          case Event.actionCallEnded:
-          // TODO: ended an incoming/outgoing call
-            break;
-          case Event.actionCallTimeout:
-          // TODO: missed an incoming call
-            break;
-          case Event.actionCallCallback:
-          // TODO: only Android - click action `Call back` from missed call notification
-            break;
-          case Event.actionCallToggleHold:
-          // TODO: only iOS
-            break;
-          case Event.actionCallToggleMute:
-          // TODO: only iOS
-            break;
-          case Event.actionCallToggleDmtf:
-          // TODO: only iOS
-            break;
-          case Event.actionCallToggleGroup:
-          // TODO: only iOS
-            break;
-          case Event.actionCallToggleAudioSession:
-          // TODO: only iOS
-            break;
-          case Event.actionDidUpdateDevicePushTokenVoip:
-          // TODO: only iOS
-            break;
-          case Event.actionCallCustom:
-            break;
-        }
-        callback(event);
-      });
-    } on Exception catch (e) {
-      print(e);
+      _currentUuid = arguments['uuid'];
+    } catch (e) {
+      print('Error showing incoming call: $e');
     }
   }
 
@@ -193,8 +277,51 @@ class _MyHomePageState extends State<MyHomePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text("CallKit Example"),
+
+        actions: <Widget>[
+          IconButton(
+            icon: Icon(Icons.settings),
+            onPressed: () {
+              setState(() {
+                textEvents = "";
+              });
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.add),
+            onPressed: () async {
+              try {
+                await platform.invokeMethod('endCall', {'uuid': _currentUuid!}); // uuidを渡す
+              } catch (e) {
+                print("Failed to end call: $e");
+              }
+            },
+          ),
+        ],
       ),
-      body: Center(
+      body:
+        LayoutBuilder(
+          builder:
+              (BuildContext context, BoxConstraints viewportConstraints) {
+            if (textEvents.isNotEmpty) {
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(8),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: viewportConstraints.maxHeight,
+                  ),
+                  child: Text(textEvents),
+                ),
+              );
+            } else {
+              return const Center(
+                child: Text('No Event'),
+              );
+            }
+          },
+        ),
+
+      /*Center(
         child:
           Column(
             children: [
@@ -204,7 +331,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ],
           )
         //Text("Waiting for a call..."),
-      ),
+      ),*/
     );
   }
 }
