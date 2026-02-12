@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'call_response_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -123,6 +124,17 @@ class _MyHomePageState extends State<MyHomePage> {
     await _audioPlayer.play(UrlSource('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'));
   }
 
+  void _showAudioPlayerDialog() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierLabel: '',
+      pageBuilder: (context, animation1, animation2) {
+        return CallResponseScreen();
+      },
+    );
+  }
+
   Future<void> listenerEvent(void Function(CallEvent) callback) async {
     try {
       FlutterCallkitIncoming.onEvent.listen((event) async {
@@ -138,14 +150,19 @@ class _MyHomePageState extends State<MyHomePage> {
           // TODO: started an outgoing call
           // TODO: show screen calling in Flutter
             break;
+
+
           case Event.actionCallAccept:
             await checkActiveCallAndHandle(); // 通話のアクティブ状態をチェックして処理
           // TODO: accepted an incoming call
           // TODO: show screen calling in Flutter
           //NavigationService.instance
           //    .pushNamedIfNotCurrent(AppRoute.callingPage, args: event.body);
-            _playAudio();
+            //_playAudio();
+            //_showAudioPlayerDialog();
             break;
+
+
           case Event.actionCallDecline:
             await checkActiveCallAndHandle(); // 通話のアクティブ状態をチェックして処理
           // TODO: declined an incoming call
@@ -198,11 +215,21 @@ class _MyHomePageState extends State<MyHomePage> {
       case 'setCurrentUuid':
         _setCurrentUuid(call.arguments);
         break;
+      case 'postPayloadDict':
+        _postPayloadDict(call.arguments);
+        break;
     }
   }
 
+  Future<void> _postPayloadDict(Map<dynamic, dynamic> arguments) async {
+      print("_postPayloadDict");
+      print(arguments);
+  }
+
   Future<void> _showIncomingCall(Map<dynamic, dynamic> arguments) async {
-    print("_showIncomingCall =====");
+    print("_showIncomingCall ==============-");
+    print(arguments);
+
     await Future.delayed(const Duration(milliseconds: 100), () async {
       final String callId = uuid.v4(); // UUIDを生成
 
@@ -263,6 +290,7 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  // uuid設定
   Future<void> _setCurrentUuid(Map<dynamic, dynamic> arguments) async {
     print("arguments --------");
     print(arguments);

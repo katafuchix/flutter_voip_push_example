@@ -34,7 +34,7 @@ import flutter_callkit_incoming
       voipRegistry.delegate = self
       voipRegistry.desiredPushTypes = [PKPushType.voIP]
   }
-
+    /*
     private func handleVoIPNotification(payload: [AnyHashable: Any]) {
         if let flutterViewController = window?.rootViewController as? FlutterViewController {
             let channel = FlutterMethodChannel(name: "com.example.flutter_callkit_incoming", binaryMessenger: flutterViewController.binaryMessenger)
@@ -58,7 +58,7 @@ import flutter_callkit_incoming
             ])
         }
     }
-    
+    */
     
     // アプリがバックグラウンドから復帰した際に必要な処理
     override func applicationWillEnterForeground(_ application: UIApplication) {
@@ -96,12 +96,23 @@ extension AppDelegate : PKPushRegistryDelegate {
     func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType, completion: @escaping () -> Void) {
         print(payload.dictionaryPayload)
         let payloadDict = payload.dictionaryPayload["aps"] as? [String:Any] ?? [:]
+
+        print("----------print(payloadDict);-------------");
         print(payloadDict);
 
-        
+        if let flutterViewController = window?.rootViewController as? FlutterViewController {
+            let channel = FlutterMethodChannel(name: "com.example.flutter_callkit_incoming", binaryMessenger: flutterViewController.binaryMessenger)
+            channel.invokeMethod("postPayloadDict", arguments: payloadDict)
+        }
+
         // 通知から通話ハンドル情報を取得
         //guard let handle = payload.dictionaryPayload["handle"] as? String else { return }
-        let handle = "handle"
+        var handle = "handle"
+        if let name = payloadDict["name"] as? String {
+            handle = name
+        }
+        print("handle : \(handle)");
+        
         // CallKitの設定
         let callUpdate = CXCallUpdate()
         callUpdate.remoteHandle = CXHandle(type: .phoneNumber, value: handle)
@@ -110,7 +121,8 @@ extension AppDelegate : PKPushRegistryDelegate {
         if UIApplication.shared.applicationState == .active {
             print("フォアグラウンドでの処理")
             // フォアグラウンドでの処理
-            handleIncomingCallInForeground(callUpdate: callUpdate, completion: completion)
+            //handleIncomingCallInForeground(callUpdate: callUpdate, completion: completion)
+            reportIncomingCall(uuid: callUUID!, handle: handle, completion: completion)
         } else {
             print("バックグラウンドまたはターミネートでの処理")
             // ターミネート状態からの起動時の処理
@@ -133,8 +145,8 @@ extension AppDelegate : PKPushRegistryDelegate {
         // 通話の確立処理をここに実装します
         print("Establishing connection for call UUID: \(callUUID.uuidString)")
     }
-    
 
+    // フォアグラウンド
     private func handleIncomingCallInForeground(callUpdate: CXCallUpdate, completion: @escaping () -> Void) {
         if let flutterViewController = window?.rootViewController as? FlutterViewController {
             let channel = FlutterMethodChannel(name: "com.example.flutter_callkit_incoming", binaryMessenger: flutterViewController.binaryMessenger)
@@ -148,8 +160,8 @@ extension AppDelegate : PKPushRegistryDelegate {
         completion()
     }
 
+    // バックグラウンド／ターミネート時
     private func handleIncomingCallInTerminatedState(callUpdate: CXCallUpdate, completion: @escaping () -> Void) {
-        
         print("handleIncomingCallInTerminatedState")
         
         callKitProvider?.reportNewIncomingCall(with: callUUID!, update: callUpdate) { error in
@@ -191,7 +203,7 @@ extension AppDelegate: CXProviderDelegate {
     // バックグラウンドまたはターミネート時の処理
     func reportIncomingCall(uuid: UUID, handle: String, hasVideo: Bool = false, completion: @escaping () -> Void) {
         let update = CXCallUpdate()
-        update.remoteHandle = CXHandle(type: .phoneNumber, value: handle)
+        update.remoteHandle = CXHandle(type: .generic, value: handle)
         update.hasVideo = hasVideo
 
         callKitProvider!.reportNewIncomingCall(with: uuid, update: update) { error in
